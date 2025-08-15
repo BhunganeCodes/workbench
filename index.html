@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transcription Workbench</title>
+  <link rel="preconnect" href="https://unpkg.com"/>
+  <style>
+    :root{
+      --bg:#0f172a; /* slate-900 */
+      --panel:#111827; /* gray-900 */
+      --muted:#334155; /* slate-600 */
+      --text:#e5e7eb; /* gray-200 */
+      --accent:#22d3ee; /* cyan-400 */
+      --accent-2:#a78bfa; /* violet-400 */
+      --danger:#ef4444;
+    }
+    html,body{height:100%;}
+    body{
+      margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji';
+      background:linear-gradient(135deg, var(--bg), #0b1025); color:var(--text);
+    }
+    .app{display:grid; grid-template-rows:auto 1fr auto; height:100vh;}
+    header{
+      display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #1f2937; background:#0b1025A0; backdrop-filter: blur(6px);
+    }
+    header h1{font-size:18px; margin:0; letter-spacing:0.4px}
+    header .badge{font-size:12px; color:#0b1025; background:linear-gradient(135deg,var(--accent),var(--accent-2));
+      padding:2px 8px; border-radius:999px; font-weight:700;}
+    .main{display:grid; grid-template-columns: minmax(320px, 520px) 1fr; gap:12px; padding:12px;}
+    .card{background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:16px; box-shadow: 0 8px 40px rgba(0,0,0,0.25);}
+    .left, .right{display:flex; flex-direction:column;}
+
+    /* LEFT: Player */
+    .panel{padding:14px;}
+    .uploader{display:grid; grid-template-columns:1fr; gap:10px;}
+    .row{display:flex; align-items:center; gap:10px;}
+    label{font-size:12px; color:#cbd5e1;}
+    input[type="file"]{width:100%; color:#cbd5e1;}
+    .player{display:flex; flex-direction:column; gap:8px;}
+    .controls{display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:8px;}
+    .controls button, .controls .range-group{background:#0b1025; border:1px solid #1f2937; color:var(--text); padding:10px; border-radius:12px; cursor:pointer; text-align:center;}
+    .controls button:hover{border-color:#374151}
+    .range-group{display:flex; flex-direction:column; gap:8px;}
+    .range-group input[type=range]{width:100%}
+    .meta{font-size:12px; color:#a3a3a3; display:flex; justify-content:space-between; gap:8px}
+
+    /* RIGHT: Editor */
+    .toolbar{display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px; border-bottom:1px solid rgba(255,255,255,0.06)}
+    .toolbar button, .toolbar select{
+      background:#0b1025; border:1px solid #1f2937; color:var(--text); padding:8px 10px; border-radius:12px; cursor:pointer;
+    }
+    .toolbar button:hover{border-color:#374151}
+    .editor{flex:1; padding:16px; overflow:auto;}
+    .editor[contenteditable="true"]{outline:none;}
+    .editor:empty:before{content:attr(data-placeholder); color:#94a3b8;}
+
+    footer{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-top:1px solid rgba(255,255,255,0.08); font-size:12px; color:#a3a3a3}
+    code.k{background:#0b1025; border:1px solid #1f2937; padding:2px 6px; border-radius:8px; color:#e2e8f0}
+
+    .chip{background:#0b1025; border:1px solid #1f2937; padding:4px 8px; border-radius:10px;}
+    .danger{color:#fee2e2}
+
+    @media (max-width: 960px){
+      .main{grid-template-columns:1fr}
+    }
+  </style>
+  <!-- Mammoth.js converts DOCX -> HTML in the browser -->
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🎧 Transcription Workbench</h1>
+    <span class="badge">Beta</span>
+    <div class="chip" id="status">Idle</div>
+  </header>
+
+  <div class="main">
+    <!-- Left column: Player & uploads -->
+    <section class="left card">
+      <div class="panel">
+        <div class="uploader">
+          <div class="row">
+            <label for="media">Audio/Video</label>
+            <input id="media" type="file" accept="audio/*,video/*" />
+          </div>
+          <div class="row">
+            <label for="doc">Word / Text</label>
+            <input id="doc" type="file" accept=".docx,.txt,.md" />
+          </div>
+        </div>
+
+        <div class="player" style="margin-top:12px">
+          <video id="player" controls crossorigin="anonymous" style="width:100%; max-height:42vh; background:#000; border-radius:12px"></video>
+          <div class="meta">
+            <div>Position: <span id="pos">00:00:00</span></div>
+            <div>Duration: <span id="dur">00:00:00</span></div>
+          </div>
+
+          <div class="controls">
+            <button id="play">▶️ / ⏸️</button>
+            <button id="back">⏪ -5s</button>
+            <button id="fwd">⏩ +5s</button>
+            <button id="mark">⏱️ Timestamp (Ctrl+M)</button>
+            <button id="loop">🔁 Loop: Off (L)</button>
+            <button id="clearLoop" class="danger">❌ Clear A/B</button>
+
+            <div class="range-group" style="grid-column: span 3">
+              <label>Speed: <span id="speedLabel">1.0×</span></label>
+              <input id="speed" type="range" min="0.5" max="2" step="0.05" value="1" />
+            </div>
+            <div class="range-group" style="grid-column: span 3">
+              <label>Volume</label>
+              <input id="volume" type="range" min="0" max="1" step="0.01" value="1" />
+            </div>
+
+            <button id="setA">Point A (A)</button>
+            <button id="setB">Point B (B)</button>
+            <div class="chip" id="ab">A: --:--:-- | B: --:--:--</div>
+            <button id="back15">⏪ -15s</button>
+            <button id="fwd15">⏩ +15s</button>
+            <button id="mute">🔇 Mute</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right column: Editor -->
+    <section class="right card">
+      <div class="toolbar">
+        <button id="newDoc">🆕 New</button>
+        <button id="saveTxt">💾 Export .txt</button>
+        <button id="saveHtml">💾 Export .html</button>
+        <button id="insertTime">⏱️ Insert Timestamp</button>
+        <select id="jumpMenu">
+          <option value="">⤴️ Jump to… (timestamps)</option>
+        </select>
+        <div class="chip">Autosave: <span id="autosave">Off</span></div>
+      </div>
+      <div id="editor" class="editor" contenteditable="true" spellcheck="true" data-placeholder="Type or load your document here…"></div>
+    </section>
+  </div>
+
+  <footer>
+    <div>
+      <strong>Shortcuts:</strong>
+      <code class="k">Space</code> Play/Pause ·
+      <code class="k">Alt+,</code> −5s · <code class="k">Alt+.</code> +5s ·
+      <code class="k">A</code>/<code class="k">B</code> set loop · <code class="k">L</code> toggle loop ·
+      <code class="k">Ctrl+M</code> insert time ·
+      <code class="k">Ctrl+=</code>/<code class="k">Ctrl+-</code> speed ± ·
+      <code class="k">Ctrl+S</code> save (.txt)
+    </div>
+    <div>Made for fast, keyboard‑driven transcription.</div>
+  </footer>
+</div>
+
+<script>
+(function(){
+  const $ = (sel)=>document.querySelector(sel);
+  const player = $('#player');
+  const pos = $('#pos');
+  const dur = $('#dur');
+  const status = $('#status');
+  const speed = $('#speed');
+  const speedLabel = $('#speedLabel');
+  const volume = $('#volume');
+  const ab = $('#ab');
+  const editor = $('#editor');
+  const autosaveLabel = $('#autosave');
+  const jumpMenu = $('#jumpMenu');
+
+  let loopOn = false, A = null, B = null, autosaveTimer = null;
+
+  function fmt(t){
+    if (!isFinite(t)) return '--:--:--';
+    t = Math.max(0, t|0);
+    const h = String((t/3600|0)).padStart(2,'0');
+    const m = String(((t%3600)/60|0)).padStart(2,'0');
+    const s = String((t%60|0)).padStart(2,'0');
+    return `${h}:${m}:${s}`;
+  }
+
+  function updateAB(){
+    ab.textContent = `A: ${A==null?'--:--:--':fmt(A)} | B: ${B==null?'--:--:--':fmt(B)}`;
+    $('#loop').textContent = `🔁 Loop: ${loopOn? 'On' : 'Off'} (L)`;
+  }
+
+  function setStatus(text){ status.textContent = text; }
+
+  // Load media
+  $('#media').addEventListener('change', e => {
+    const f = e.target.files[0]; if(!f) return;
+    const url = URL.createObjectURL(f);
+    player.src = url;
+    player.playbackRate = parseFloat(speed.value);
+    setStatus('Loaded media: ' + f.name);
+  });
+
+  // Load document (DOCX/TXT/MD)
+  $('#doc').addEventListener('change', async (e)=>{
+    const f = e.target.files[0]; if(!f) return;
+    if (f.name.toLowerCase().endsWith('.docx')){
+      const arrayBuffer = await f.arrayBuffer();
+      setStatus('Converting Word document…');
+      try{
+        const result = await window.mammoth.convertToHtml({arrayBuffer});
+        editor.innerHTML = result.value;
+        setStatus('DOCX loaded');
+      }catch(err){
+        console.error(err);
+        setStatus('Failed to read DOCX');
+        alert('Could not open the .docx file in-browser. You can still paste text or use .txt/.md.');
+      }
+    } else {
+      const text = await f.text();
+      editor.innerHTML = text.split(/\n\n+/).map(p=>`<p>${p.replaceAll('\n','<br>')}</p>`).join('');
+      setStatus('Text loaded');
+    }
+    saveLocal();
+    refreshJumpMenu();
+  });
+
+  // Player events
+  player.addEventListener('loadedmetadata', ()=>{
+    dur.textContent = fmt(player.duration);
+  });
+  player.addEventListener('timeupdate', ()=>{
+    pos.textContent = fmt(player.currentTime);
+    if (loopOn && A!=null && B!=null && player.currentTime>=B){
+      player.currentTime = A;
+      player.play();
+    }
+  });
+
+  // Controls
+  $('#play').onclick = ()=> player.paused? player.play() : player.pause();
+  $('#back').onclick = ()=> player.currentTime = Math.max(0, player.currentTime - 5);
+  $('#fwd').onclick = ()=> player.currentTime = Math.min(player.duration||1e9, player.currentTime + 5);
+  $('#back15').onclick = ()=> player.currentTime = Math.max(0, player.currentTime - 15);
+  $('#fwd15').onclick = ()=> player.currentTime = Math.min(player.duration||1e9, player.currentTime + 15);
+  $('#mute').onclick = ()=> player.muted = !player.muted;
+
+  speed.addEventListener('input', ()=>{
+    player.playbackRate = parseFloat(speed.value);
+    speedLabel.textContent = player.playbackRate.toFixed(2)+'×';
+  });
+  volume.addEventListener('input', ()=> player.volume = parseFloat(volume.value));
+
+  $('#setA').onclick = ()=>{ A = player.currentTime|0; updateAB(); };
+  $('#setB').onclick = ()=>{ B = player.currentTime|0; updateAB(); };
+  $('#loop').onclick = ()=>{ loopOn = !loopOn; updateAB(); };
+  $('#clearLoop').onclick = ()=>{ A=null; B=null; loopOn=false; updateAB(); };
+
+  // Editor helpers
+  function insertAtCursor(html){
+    editor.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount===0){ editor.innerHTML += html; return; }
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const temp = document.createElement('div'); temp.innerHTML = html;
+    const frag = document.createDocumentFragment();
+    let node, lastNode; while((node=temp.firstChild)) { lastNode = frag.appendChild(node); }
+    range.insertNode(frag);
+    if (lastNode){
+      range.setStartAfter(lastNode); range.collapse(true);
+      sel.removeAllRanges(); sel.addRange(range);
+    }
+  }
+
+  function currentTimestampTag(){ return `<span class="ts" data-t="${player.currentTime|0}">[${fmt(player.currentTime)}]</span>`; }
+
+  function addTimestamp(){
+    insertAtCursor(' ' + currentTimestampTag() + ' ');
+    refreshJumpMenu();
+    saveLocal();
+  }
+
+  $('#mark').onclick = addTimestamp;
+  $('#insertTime').onclick = addTimestamp;
+
+  // Jump menu (list of timestamps)
+  function refreshJumpMenu(){
+    const stamps = [...editor.querySelectorAll('.ts')].map((el,i)=>({i, t: +el.dataset.t, el}));
+    jumpMenu.innerHTML = '<option value="">⤴️ Jump to… (timestamps)</option>' +
+      stamps.map(s=>`<option value="${s.t}">${fmt(s.t)}</option>`).join('');
+  }
+  jumpMenu.onchange = (e)=>{
+    const t = parseInt(e.target.value,10); if(!isFinite(t)) return;
+    player.currentTime = t; player.pause();
+  }
+
+  // Export
+  function download(filename, text){
+    const blob = new Blob([text], {type: 'text/plain'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  }
+  $('#saveTxt').onclick = ()=>{
+    const text = editor.innerText.replace(/\u00A0/g,' ');
+    download('transcript.txt', text);
+  };
+  $('#saveHtml').onclick = ()=>{
+    const html = `<!doctype html><meta charset="utf-8"><title>Transcript</title><body>${editor.innerHTML}`;
+    const blob = new Blob([html], {type:'text/html'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'transcript.html'; a.click();
+  };
+  $('#newDoc').onclick = ()=>{
+    if (editor.innerText.trim() && !confirm('Clear current document?')) return;
+    editor.innerHTML = '';
+    saveLocal();
+  };
+
+  // Autosave to localStorage
+  const KEY = 'transcription_workbench_v1';
+  function saveLocal(){
+    try{ localStorage.setItem(KEY, JSON.stringify({ html: editor.innerHTML })); autosaveLabel.textContent='On'; }catch(e){ autosaveLabel.textContent='Off'; }
+  }
+  function loadLocal(){
+    try{
+      const raw = localStorage.getItem(KEY); if(!raw) return;
+      const {html} = JSON.parse(raw); if(html) editor.innerHTML = html;
+      refreshJumpMenu(); autosaveLabel.textContent='On';
+    }catch(e){ console.warn(e); }
+  }
+  editor.addEventListener('input', ()=>{ clearTimeout(autosaveTimer); autosaveTimer = setTimeout(saveLocal, 400); });
+  loadLocal();
+
+  // Keyboard shortcuts (global, but ignore when focused in inputs except editor)
+  document.addEventListener('keydown', (e)=>{
+    const active = document.activeElement;
+    const inTypingField = active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA');
+    if (inTypingField && active !== editor) return;
+
+    // Space: play/pause (prevent page scroll)
+    if (e.code==='Tab') { e.preventDefault(); player.paused? player.play() : player.pause(); return; }
+
+    // Skip
+    if (e.altKey && e.key===','){ e.preventDefault(); player.currentTime=Math.max(0, player.currentTime-5); return; }
+    if (e.altKey && e.key==='.'){ e.preventDefault(); player.currentTime=Math.min(player.duration||1e9, player.currentTime+5); return; }
+
+    // Loop A/B/L
+    if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase()==='a'){ A=player.currentTime|0; updateAB(); return; }
+    if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase()==='b'){ B=player.currentTime|0; updateAB(); return; }
+    if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase()==='l'){ loopOn=!loopOn; updateAB(); return; }
+
+    // Insert timestamp
+    if (e.ctrlKey && e.key.toLowerCase()==='m'){ e.preventDefault(); addTimestamp(); return; }
+
+    // Adjust speed Ctrl+= / Ctrl+-
+    if (e.ctrlKey && (e.key==='=' || e.key==='+')){ e.preventDefault(); speed.value = Math.min(2, (parseFloat(speed.value)+0.05)).toFixed(2); speed.dispatchEvent(new Event('input')); return; }
+    if (e.ctrlKey && e.key==='-'){ e.preventDefault(); speed.value = Math.max(0.5, (parseFloat(speed.value)-0.05)).toFixed(2); speed.dispatchEvent(new Event('input')); return; }
+
+    // Save (txt)
+    if (e.ctrlKey && e.key.toLowerCase()==='s'){ e.preventDefault(); $('#saveTxt').click(); return; }
+  });
+
+})();
+</script>
+</body>
+</html>
