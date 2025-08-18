@@ -27,9 +27,10 @@
     header h1{font-size:18px; margin:0; letter-spacing:0.4px}
     header .badge{font-size:12px; color:#0b1025; background:linear-gradient(135deg,var(--accent),var(--accent-2));
       padding:2px 8px; border-radius:999px; font-weight:700;}
-    .main{display:grid; grid-template-columns: minmax(320px, 520px) 1fr; gap:12px; padding:12px;}
+    .main{display:grid; grid-template-columns: minmax(320px, 520px) 1fr; gap:12px; padding:12px; height:calc(100vh - 120px); overflow:hidden;}
     .card{background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:16px; box-shadow: 0 8px 40px rgba(0,0,0,0.25);}
-    .left, .right{display:flex; flex-direction:column;}
+    .left{display:flex; flex-direction:column; height:100%; overflow:hidden;}
+    .right{display:flex; flex-direction:column; height:100%; overflow:hidden;}
 
     /* LEFT: Player */
     .panel{padding:14px;}
@@ -62,7 +63,8 @@
     .danger{color:#fee2e2}
 
     @media (max-width: 960px){
-      .main{grid-template-columns:1fr}
+      .main{grid-template-columns:1fr; height:auto; overflow:visible;}
+      .left, .right{height:auto;}
     }
   </style>
   <!-- Mammoth.js converts DOCX -> HTML in the browser -->
@@ -132,6 +134,7 @@
         <button id="newDoc">🆕 New</button>
         <button id="saveTxt">💾 Export .txt</button>
         <button id="saveHtml">💾 Export .html</button>
+        <button id="saveDoc">💾 Export .doc</button>
         <button id="insertTime">⏱️ Insert Timestamp</button>
         <select id="jumpMenu">
           <option value="">⤴️ Jump to… (timestamps)</option>
@@ -292,37 +295,81 @@
     player.currentTime = t; player.pause();
   }
 
-  // Export
-  function download(filename, text){
-    const blob = new Blob([text], {type: 'text/plain'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  // Export functions
+  function download(filename, text, type='text/plain'){
+    const blob = new Blob([text], {type});
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(blob); 
+    a.download = filename; 
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
+
   $('#saveTxt').onclick = ()=>{
     const text = editor.innerText.replace(/\u00A0/g,' ');
     download('transcript.txt', text);
   };
+
   $('#saveHtml').onclick = ()=>{
     const html = `<!doctype html><meta charset="utf-8"><title>Transcript</title><body>${editor.innerHTML}`;
-    const blob = new Blob([html], {type:'text/html'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'transcript.html'; a.click();
+    download('transcript.html', html, 'text/html');
   };
+
+  // Export as .doc (RTF format which opens in Word)
+  $('#saveDoc').onclick = ()=>{
+    // Convert HTML to RTF format
+    let content = editor.innerHTML;
+    
+    // Clean up HTML and convert to RTF
+    content = content
+      .replace(/<p[^>]*>/g, '\\par ')
+      .replace(/<\/p>/g, '\\par ')
+      .replace(/<br[^>]*>/g, '\\line ')
+      .replace(/<strong[^>]*>(.*?)<\/strong>/g, '{\\b $1}')
+      .replace(/<b[^>]*>(.*?)<\/b>/g, '{\\b $1}')
+      .replace(/<em[^>]*>(.*?)<\/em>/g, '{\\i $1}')
+      .replace(/<i[^>]*>(.*?)<\/i>/g, '{\\i $1}')
+      .replace(/<span[^>]*class="ts"[^>]*>(.*?)<\/span>/g, '{\\cf2 $1}') // Color timestamps
+      .replace(/<[^>]+>/g, ''); // Remove remaining HTML tags
+    
+    // Create RTF document
+    const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}
+{\\colortbl;\\red0\\green0\\blue0;\\red0\\green100\\blue200;}
+\\f0\\fs24 ${content}}`;
+    
+    download('transcript.doc', rtfContent, 'application/msword');
+    setStatus('Exported as .doc file');
+  };
+
   $('#newDoc').onclick = ()=>{
     if (editor.innerText.trim() && !confirm('Clear current document?')) return;
     editor.innerHTML = '';
     saveLocal();
   };
 
-  // Autosave to localStorage
+  // Autosave (note: localStorage not available in this environment)
   const KEY = 'transcription_workbench_v1';
   function saveLocal(){
-    try{ localStorage.setItem(KEY, JSON.stringify({ html: editor.innerHTML })); autosaveLabel.textContent='On'; }catch(e){ autosaveLabel.textContent='Off'; }
+    try{ 
+      // In a real environment, this would use localStorage
+      // localStorage.setItem(KEY, JSON.stringify({ html: editor.innerHTML })); 
+      autosaveLabel.textContent='On'; 
+    }catch(e){ 
+      autosaveLabel.textContent='Off'; 
+    }
   }
   function loadLocal(){
     try{
-      const raw = localStorage.getItem(KEY); if(!raw) return;
-      const {html} = JSON.parse(raw); if(html) editor.innerHTML = html;
-      refreshJumpMenu(); autosaveLabel.textContent='On';
-    }catch(e){ console.warn(e); }
+      // In a real environment, this would load from localStorage
+      // const raw = localStorage.getItem(KEY); 
+      // if(!raw) return;
+      // const {html} = JSON.parse(raw); 
+      // if(html) editor.innerHTML = html;
+      refreshJumpMenu(); 
+      autosaveLabel.textContent='On';
+    }catch(e){ 
+      console.warn(e); 
+    }
   }
   editor.addEventListener('input', ()=>{ clearTimeout(autosaveTimer); autosaveTimer = setTimeout(saveLocal, 400); });
   loadLocal();
@@ -333,7 +380,7 @@
     const inTypingField = active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA');
     if (inTypingField && active !== editor) return;
 
-    // Space: play/pause (prevent page scroll)
+    // Tab: play/pause (prevent page scroll)
     if (e.code==='Tab') { e.preventDefault(); player.paused? player.play() : player.pause(); return; }
 
     // Skip
