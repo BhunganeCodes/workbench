@@ -117,8 +117,8 @@
               <input id="volume" type="range" min="0" max="1" step="0.01" value="1" />
             </div>
 
-            <button id="setA">Point A (A)</button>
-            <button id="setB">Point B (B)</button>
+            <button id="setA">Point A (Ctrl+A)</button>
+            <button id="setB">Point B (Ctrl+B)</button>
             <div class="chip" id="ab">A: --:--:-- | B: --:--:--</div>
             <button id="back15">⏪ -15s</button>
             <button id="fwd15">⏩ +15s</button>
@@ -150,7 +150,7 @@
       <strong>Shortcuts:</strong>
       <code class="k">Tab</code> Play/Pause ·
       <code class="k">Alt+,</code> −5s · <code class="k">Alt+.</code> +5s ·
-      <code class="k">Ctrl+A</code>/<code class="k">Ctrl+B</code> set loop · <code class="k">Ctrl+L</code> toggle loop ·
+      <code class="k">A</code>/<code class="k">B</code> set loop · <code class="k">L</code> toggle loop ·
       <code class="k">Ctrl+M</code> insert time ·
       <code class="k">Ctrl&+</code>/<code class="k">Ctrl&-</code> speed ± ·
       <code class="k">Ctrl+S</code> save (.txt)
@@ -187,7 +187,7 @@
 
   function updateAB(){
     ab.textContent = `A: ${A==null?'--:--:--':fmt(A)} | B: ${B==null?'--:--:--':fmt(B)}`;
-    $('#loop').textContent = `🔁 Loop: ${loopOn? 'On' : 'Off'} (L)`;
+    $('#loop').textContent = `🔁 Loop: ${loopOn? 'On' : 'Off'} (Ctrl+L)`;
   }
 
   function setStatus(text){ status.textContent = text; }
@@ -387,10 +387,10 @@
     if (e.altKey && e.key===','){ e.preventDefault(); player.currentTime=Math.max(0, player.currentTime-5); return; }
     if (e.altKey && e.key==='.'){ e.preventDefault(); player.currentTime=Math.min(player.duration||1e9, player.currentTime+5); return; }
 
-    // Loop A/B/L - now require Ctrl key
-    if (e.ctrlKey && e.key.toLowerCase()==='a'){ e.preventDefault(); A=player.currentTime|0; updateAB(); return; }
-    if (e.ctrlKey && e.key.toLowerCase()==='b'){ e.preventDefault(); B=player.currentTime|0; updateAB(); return; }
-    if (e.ctrlKey && e.key.toLowerCase()==='l'){ e.preventDefault(); loopOn=!loopOn; updateAB(); return; }
+    // Loop A/B/L
+    if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase()==='a'){ A=player.currentTime|0; updateAB(); return; }
+    if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase()==='b'){ B=player.currentTime|0; updateAB(); return; }
+    if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase()==='l'){ loopOn=!loopOn; updateAB(); return; }
 
     // Insert timestamp
     if (e.ctrlKey && e.key.toLowerCase()==='m'){ e.preventDefault(); addTimestamp(); return; }
